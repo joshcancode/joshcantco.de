@@ -1,4 +1,4 @@
-import { Router, Status } from 'https://deno.land/x/oak@v10.6.0/mod.ts';
+import { Router, Status } from 'https://deno.land/x/oak@v11.1.0/mod.ts';
 import VideoController from '../controllers/Video.ts'
 
 const router = new Router();
@@ -6,9 +6,10 @@ router
     .post('/download', async (ctx) => {
         const body = JSON.parse(await ctx.request.body().value);
 
-        const listIndex = body.url.indexOf('?list=');
-        if (listIndex > -1)
-            body.url = body.url.substring(0, listIndex);
+        if (body.url.startsWith("https://youtube.com")) {
+            const listIndex = body.url.indexOf('?list=');
+            listIndex > -1 ?? body.url.substring(0, listIndex);
+        }
 
         const videoPath = await VideoController.downloadMedia(body.url, body.videoFormat);
 
