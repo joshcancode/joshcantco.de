@@ -1,10 +1,8 @@
-import { Application, Router } from 'https://deno.land/x/oak@v10.6.0/mod.ts';
-
-const SERVER_PORT = 8000;
+import { Application, Router } from "https://deno.land/x/oak@v11.1.0/mod.ts";
 
 const app = new Application();
 
-for await (const entry of Deno.readDir('./routes')) {
+for await (const entry of Deno.readDir("./routes")) {
     if (!entry.isFile) continue;
 
     const route = await import(`./routes/${entry.name}`)
@@ -29,4 +27,4 @@ app.use(async (ctx, next) => {
     });
 });
 
-app.listen({ port: SERVER_PORT });
+app.listen({ port: 8000 });
