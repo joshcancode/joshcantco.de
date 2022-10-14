@@ -1,0 +1,313 @@
+
+<!DOCTYPE html>
+<html lang='en_US'>
+    <head>
+        <meta charset='utf-8'>
+        <meta name='viewport' content='width=device-width, initial-scale=1'>
+        <meta property='og:type' content='article'>
+        <meta property='og:title' content='Josh&quot;s Media Downloader' />
+        <meta property='og:description' content='Simple ad-free interface for downloading content from many popular media sites' />
+        <title>Josh's Media Downloader</title>
+        <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+
+        <link href='../assets/css/main.css' rel='stylesheet' />
+        <link href='https://kit.fontawesome.com/' rel='dns-prefetch' />
+
+        <script src='https://kit.fontawesome.com/e8baf4e0c0.js' crossorigin='anonymous'></script>
+        <script src='https://kit.fontawesome.com/aa2713fb5e.js' crossorigin='anonymous'></script>
+
+        <style>
+            td {
+                border-spacing: 0;
+                padding-left: 0.5rem;
+            }
+            tr:nth-child(even) {
+                background: #28283d;
+            }
+        </style>
+
+        <script>
+            const isValidUrl = (string) => {
+                try {
+                    const url = new URL(string);
+                    return url.protocol === 'http:' || url.protocol === 'https:';
+                } catch (_) {
+                    return false;  
+                }
+            }
+
+            addEventListener('DOMContentLoaded', () => {
+                const downloadButton = document.getElementById('download-button');
+                const urlInput = document.getElementById('url-input-field');
+                const videoFormat = document.querySelector('select[name="video-format"');
+                const audioFormat = document.querySelector('select[name="audio-format"');
+
+                const changeLoadingAnimation = (restore = false) => {
+                    if (restore) {
+                        downloadButton.classList.remove('squish');
+                        downloadButton.textContent = 'Download';
+                        downloadButton.classList.remove('is-loading');
+                    }
+                    else {
+                        downloadButton.classList.add('squish');
+                        downloadButton.textContent = '';
+                        downloadButton.classList.add('is-loading');
+                    }
+                }
+
+                /* downloadButton.addEventListener('click', async () => {
+                    if (!isValidUrl(urlInput.value))
+                        return alert('Please enter a valid URL');
+
+                    changeLoadingAnimation(false);
+
+                    try {
+                        const response = await fetch('/videoDetails', {
+                            method: 'POST',
+                            
+                            body: JSON.stringify({
+                                url: urlInput.value
+                            }),
+                            headers: {
+                                'Content-Type': 'text/plain'
+                            }
+                        });
+
+                        const formats = await response.json();
+
+                        const insertCell = (row, content) => {
+                            const th = row.insertCell();
+                            th.textContent = content;
+                        }
+
+                        const div = document.createElement('div');
+                        div.classList.add('full-width')
+                        div.style.cssText += 'height: 500px; overflow-y: auto;';
+
+                        const table = document.createElement('table');
+                        table.classList.add('full-width');
+
+                        const titleTr = table.insertRow();
+                        insertCell(titleTr, 'Format');
+                        insertCell(titleTr, 'Resolution');
+                        insertCell(titleTr, 'File size');
+
+                        formats.forEach(format => {
+                            const tr = table.insertRow();
+                            insertCell(tr, format.fileType);
+                            insertCell(tr, format.resolution);
+                            insertCell(tr, format.fileSize);
+
+                            const downloadBtn = document.createElement('button');
+                            downloadBtn.classList.add('drop-shadow', 'rounded-light')
+                            downloadBtn.id = format.formatId;
+                            downloadBtn.style.cssText += 'min-width: auto; padding: 0.5rem 0.5rem;';
+
+                            const downloadIcon = document.createElement('i');
+                            downloadIcon.classList.add('fa-solid', 'fa-download');
+                            downloadBtn.appendChild(downloadIcon);
+
+                            const downloadCell = tr.insertCell();
+                            downloadCell.classList.add('flex-row', 'align-h');
+                            downloadCell.appendChild(downloadBtn);
+
+                            downloadBtn.addEventListener('click', async () => {
+                                try {
+                                    const response = await fetch('/download', {
+                                        method: 'POST',
+                                        
+                                        body: JSON.stringify({
+                                            url: urlInput.value,
+                                            formatId: format.formatId
+                                        }),
+                                        headers: {
+                                            'Content-Type': 'text/plain'
+                                        }
+                                    });
+
+                                    if (response.status == 400)
+                                        throw response.body;
+
+                                    const blob = await response.blob();
+
+                                    var a = document.createElement('a');
+                                    a.href = window.URL.createObjectURL(blob);
+                                    a.download = response.headers.get('Content-Disposition');
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    a.remove();
+                                } catch (err) {
+                                    alert(`An error has occured: ${err}`);
+                                }
+
+                                changeLoadingAnimation(true);
+                            });
+                        });
+
+                        div.appendChild(table);
+
+                        const formatContainer = document.getElementById('formats');
+                        formatContainer.appendChild(div);
+                    } catch (err) {
+                        alert(`An error has occured: ${err}`);
+                    }
+
+                    changeLoadingAnimation(true);
+                }); */
+
+                downloadButton.addEventListener('click', async () => {
+                    if (!isValidUrl(urlInput.value)) return alert('Please enter a valid URL');
+
+                    changeLoadingAnimation(false);
+
+                    try {
+                        const response = await fetch('/download', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                url: urlInput.value,
+                                audioFormat: audioFormat.value,
+                                videoFormat: videoFormat.value
+                            }),
+                            headers: {
+                                'Content-Type': 'text/plain'
+                            }
+                        });
+
+                        if (response.status == 400) throw response.body;
+
+                        const blob = await response.blob();
+
+                        var a = document.createElement('a');
+                        a.href = window.URL.createObjectURL(blob);
+                        a.download = response.headers.get('Content-Disposition');
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                    } catch (err) {
+                        alert(`An error has occured: ${err}`);
+                    }
+
+                    changeLoadingAnimation(true);
+                });
+            })
+        </script>
+    </head>
+
+    <body class='full-height'>
+        <main class='full-height horizontal-center vertical-center'>
+            <!-- <pre>
+ _...---.._            _..---..._
+\     /\   \          /   /\     /
+ \   (  )   \        /   (  )   /
+  '.  \/   .'\      /'.   \/  .'
+    ''---''   )    (   ''---''
+            ./;.--.;\.
+          .' /_...._\ '.
+        .'   '.o  o.'   '.
+       (        \/        )   ____________
+        '.___..-''-..___.'    \           |
+           \          /        |   meow   |
+            '-.____.-'         |__________|
+            </pre> -->
+
+            <!-- <div class="tabs">
+                <div class="tab">
+                    <input type="radio" id="tab-1" name="tab-group-1" checked>
+                    <label for="tab-1">Tab One</label>
+                    <div class="content">
+                        <p>Stuff for Tab One</p>
+                    </div>
+                </div>
+                <div class="tab">
+                    <input type="radio" id="tab-2" name="tab-group-1">
+                    <label for="tab-2">Tab Two</label>
+                    <div class="content">
+                        <p>Stuff for Tab Two</p>
+                        <img src="//placekitten.com/200/100">
+                    </div>
+                </div>
+                <div class="tab">
+                    <input type="radio" id="tab-3" name="tab-group-1">
+                    <label for="tab-3">Tab Three</label>
+                    <div class="content">
+                        <p>Stuff for Tab Three</p>
+                        <img src="//placekitten.com/200/100">
+                    </div>
+                </div>
+            </div> -->
+
+            <div class='box drop-shadow fade-in-down' style='width: 800px;'>
+                <header class='align-text-center'>
+                    <h1>Josh's Media Downloader</h1>
+                    <p>Minimal interface for downloading content from <a href="https://raw.githubusercontent.com/yt-dlp/yt-dlp/master/supportedsites.md">many popular media sites</a>.</p>
+                </header>
+
+                <div class='content horizontal-center direction-column full-width space-children-bottom'>
+                    <div class='flex-row full-width no-gaps' style='display: flex'>
+                        <i class='drop-shadow rounded-light fa-solid fa-link icon-left full-width' style='color: gray; position: relative; overflow-x: hidden'>
+                            <input type='text' id='url-input-field' placeholder='Video URL'/>
+                        </i>
+                        <button class='drop-shadow rounded-light' id='download-button' style="position: relative">Download</button>
+                    </div>
+                    
+                    <hr class='solid full-width'/>
+
+                    <div class='flex-row align-h align-v full-width'>
+                        <label style='margin-right: 0.5rem'>Video format</label>
+                        <select class='rounded-light' name='video-format' style='background: #28283d; color: lightgray; margin-right: 1rem'>
+                            <option value="avi">AVI</option>
+                            <option value="flv">FLV</option>
+                            <option value="mkv">MKV</option>
+                            <option value="mov">MOV</option>
+                            <option value="mp4">MP4</option>
+                            <option value="webm">WEBM</option>
+                        </select>
+
+                        <label style='margin-right: 0.5rem'>Audio format</label>
+                        <select class='rounded-light' name='audio-format' style='background: #28283d; color: lightgray;'>
+                            <option value="aac">AAC</option>
+                            <option value="aiff">AIFF</option>
+                            <option value="alac">ALAC</option>
+                            <option value="flac">FLAC</option>
+                            <option value="m4a">M4A</option>
+                            <option value="mka">MKA</option>
+                            <option value="mp3">MP3</option>
+                            <option value="ogg">OGG</option>
+                            <option value="opus">OPUS</option>
+                            <option value="vorbis">VORBIS</option>
+                            <option value="wav">WAV</option>
+                        </select>
+                    </div>
+
+                    <input id="collapsible" class="toggle" type="checkbox">
+                    <label for="collapsible" class="lbl-toggle">Learn more</label>
+                    <div class="collapsible-content">
+                        <div class="content-inner">
+                            <p>
+                                This tool utilizes custom handlers for specific formats, providing the highest visual quality. Most other downloaders will 
+                                fetch the best format that includes both video and audio. However, this will sometimes create an instance where the best 
+                                format that includes both video and audio is at a lower visual quality than the original video. 
+                                <br><br>
+                                For example, most YouTube  videos that are 1080p and up do not provide a format that includes both video and audio, and are 
+                                instead separated into split video and audio tracks. 
+                                <br><br>
+                                To ensure the highest quality, this tool downloads both the highest quality video track and the highest quality audio track, 
+                                and them combines them into the desired format on the backend. Most downloaders purposefully grab the best available format 
+                                with video and audio just to make the download faster and smaller, but you miss out on quality that can be hard to obtain.
+                            </p>
+                        </div>
+                    </label>
+
+                    <!-- <div class="flex-row align-h align-v" style='flex: 1 0 auto;'>
+                        <button class='drop-shadow rounded-light'><a href='https://raw.githubusercontent.com/yt-dlp/yt-dlp/master/supportedsites.md'>Supported sites</a></button>&nbsp;|&nbsp;
+                        <p class='secondary-text-color'>Powered by <a href='https://github.com/yt-dlp/yt-dlp'>yt-dlp</a></p>
+                    </div> -->
+
+                    <!-- <div class='full-width' id='formats'>
+
+                    </div> -->
+                </div>
+            </div>
+        </main>
+    </body>
+</html>
