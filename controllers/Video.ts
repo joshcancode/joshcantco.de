@@ -1,212 +1,172 @@
-import { readLines } from "https://deno.land/std@0.151.0/io/mod.ts";
-import { MediaFormat } from "../interfaces/MediaFormat.ts";
+import {
+	readLines
+} from "../deps.ts";
 
-export default {
-    /* downloadMedia: async (url: string, formatId: string | undefined) => {
-        const args = [
-            './yt-dlp_x86',
-            '--abort-on-error',
-            '--restrict-filenames',
-            '--embed-metadata',
-            '--ffmpeg-location', Deno.cwd(),
-            url
-        ]
+import { join } from "https://deno.land/std@0.181.0/path/mod.ts";
+import { DownloadParams } from "../interfaces/MediaFormat.ts";
 
-        if (formatId)
-            args.splice(2, 0, `-f ${formatId}`);
+export const handleDownload = async (
+	ip: string,
+	ws: WebSocket,
+	downloadParams: DownloadParams
+) => {
+	const params = [
+		"./yt-dlp",
+		"--abort-on-error",
+		"--ffmpeg-location", join(Deno.cwd(), "tools"),
+		"--newline",
+		"--no-simulate",
+		"-o", "public/download/%(extractor)s/%(id)s/%(title)s.%(ext)s",
+		// "--prefer-free-formats",
+		"--print", "%(.{id,title,extractor_key})j",
+		"--print", "after_move:filepath",
+		"--progress",
+		"--restrict-filenames",
+		// "-v"
+	];
 
-        const childProcess = Deno.run({ 
-            cmd: args,
-            cwd: Deno.cwd(),
-            stdout: 'piped',
-            stderr: 'piped'
-        });
-    
-        let filePath = '';
-    
-        for await (const line of readLines(childProcess.stdout)) {
-            console.log(line);
-    
-            if (line.startsWith('[ERROR]')) return '';
-    
-            // Filename is in quotes, so we can extract the filename
-            if (line.startsWith('[Merger]')) {
-                filePath = line.slice(line.indexOf('\"') + 1, line.lastIndexOf('\"'));
-                break;
-            }
-    
-            if (line.endsWith('already been downloaded')) {
-                filePath = line.slice(11, -28); // Remove '[download] ' and 'has already been downloaded\n'
-                childProcess.close();
-                return filePath;
-            }
-    
-            if (line.startsWith('[download] D')) {
-                filePath = line.slice(24); // Remove '[download] Destination: '
+	console.log("Resolution: " + downloadParams.resolution + "\nFormat: " + downloadParams.videoFormat);
 
-                // The filename here contains a fragment ID before the filetype. Remove the fragment ID by performing a global regex match and removing the last result
-                const matches = [ ... filePath.matchAll(/.f[0-9]{3}.*?/g) ];
-                if (matches.length > 0)
-                    filePath = filePath.replace(matches[matches.length - 1][0], '');
-                break;
-            }
-        }
-    
-        await childProcess.status();
-        return filePath;
-    },
-    fetchVideoDetails: async (url: string) => {
-        const childProcess = Deno.run({ 
-            cmd: [ 
-                './yt-dlp_x86',
-                '--abort-on-error',
-                '--list-formats',
-                url
-            ],
-            cwd: Deno.cwd(),
-            stdout: 'piped',
-            stderr: 'piped'
-        });
+	if (downloadParams.resolution) {
+		params.push("-S", `height:${downloadParams.resolution.substring(downloadParams.resolution.indexOf("x") + 1)}`, downloadParams.url);
+	}
 
-        let extractor = '';
+	if (downloadParams.videoFormat) {
+		params.push("--merge-output-format", downloadParams.videoFormat, "--remux-video", downloadParams.videoFormat);
 
-        const formats: MediaFormat[] = [];
-        const formatRegex = /[^\s]+/g;
+		if (downloadParams.videoFormat === "flv" || downloadParams.videoFormat === "mov") {
+			params.push("-f", "bv*+ba[acodec!=opus]/b");
+		} else if (downloadParams.videoFormat === "mp4" || downloadParams.videoFormat === "webm") {
+			params.push("-f", "bv*+ba[acodec=opus]/b");
+		} else {
+			params.push("-f", "bv*+ba/b");
+		}
+	}
 
-        let printingFormats = false;
+	params.push(downloadParams.url);
 
-        for await (const line of readLines(childProcess.stdout)) {
-            if (extractor.length == 0) {
-                const matches = line.match(/\[(.*?)\]/);
-                if (matches)
-                    extractor = matches[1][1];
-            }
+	const proc = Deno.run({ 
+		cmd: params,
+		cwd: Deno.cwd(),
+		stdout: "piped",
+		stderr: "piped"
+	});
 
-            if (line.includes("---")) {
-                printingFormats = true;
-                continue;
-            }
+	let infoJson: { 
+		id: "",
+		title: "",
+		extractor_key: ""
+	} | undefined;
 
-            if (!printingFormats || line.includes('mhtml'))
-                continue;
+	for await (const line of readLines(proc.stdout)) {
+		console.log(line);
 
-            console.log(line);
+		if (!infoJson) {
+			infoJson = JSON.parse(line);
+			console.log(`[ACTION] IP: ${ip} | Title: ${infoJson?.title} | Extractor: ${infoJson?.extractor_key}`);
+			continue;
+		}
 
-            // Seperate every word by the spaces in-between
-            const matches = [ ... line.matchAll(formatRegex) ];
+		if (ws.readyState !== WebSocket.OPEN)
+			continue;
 
-            const mediaFormat: MediaFormat = {
-                formatId: matches[0][0],
-                fileType: matches[1][0],
-                resolution: matches[2][0] === 'audio' ? '0' : matches[2][0],
-                fileSize: undefined
-            };
+		if (line.startsWith("[download]")) {
+			ws.send(JSON.stringify({
+				type: "UPDATE",
+				data: line.substring("[download] ".length, line.indexOf("%") + 1)
+			}));
+			continue;
+		}
 
-            switch (extractor) {
-                case 'youtube': {
-                    for (let i = mediaFormat.resolution === '0' ? 5 : 4; i < 7; ++i) {
-                        const match = matches[i][0];
-                        if (match.endsWith('iB') || match === '~') {
-                            mediaFormat.fileSize = match.length > 1 ? match : matches[i + 1][0];
-                            break;
-                        }
-                    }
-                    break;
-                }
-            }
+		ws.send(JSON.stringify({
+			type: "DOWNLOAD",
+			data: JSON.stringify({
+				path: line.substring(line.indexOf("public") + "public".length + 1),
+				file: line.substring(line.indexOf(`${infoJson.id}`) + `${infoJson.id}`.length + 1),
+			})
+		}));
+		ws.close();
+	}
 
-            formats.push(mediaFormat);
-        }
+	for await (const line of readLines(proc.stderr)) {
+		console.error(line);
+	}
 
-        await childProcess.status();
-        return formats;
-    } */
-    fetchVideoDetails: async (url: string) => { return ''; },
-    downloadMedia: async (url: string, videoFormat: string) => {
-        let args: string[] = [];
+	const status = await proc.status();
+	if (ws.readyState !== WebSocket.OPEN)
+		return;
 
-        if (videoFormat === "webm") {
-            args = [
-                './yt-dlp',
-                '--abort-on-error',
-                '--restrict-filenames',
-                '--embed-metadata',
-                '--ffmpeg-location', Deno.cwd(),
-                '--downloader', 'ffmpeg',
-                '-f', 'bv[ext=webm]+ba[ext=webm]',
-                '--merge-output-format', videoFormat,
-                url
-            ];
-        }
-        else if (videoFormat === "mp4") {
-            args = [
-                './yt-dlp',
-                '--abort-on-error',
-                '--restrict-filenames',
-                '--embed-metadata',
-                '--ffmpeg-location', Deno.cwd(),
-                '--downloader', 'ffmpeg',
-                '-f', 'bv[ext=mp4]+ba[ext=m4a]',
-                '--merge-output-format', videoFormat,
-                url
-            ];
-        }
-        else {
-            args = [
-                './yt-dlp',
-                '--abort-on-error',
-                '--restrict-filenames',
-                '--embed-metadata',
-                '--ffmpeg-location', Deno.cwd(),
-                '--downloader', 'ffmpeg',
-                '-f', 'bv+ba[ext=m4a]',
-                '--merge-output-format', videoFormat,
-                url
-            ];
-        }
+	if (status.code === 1) {
+		ws.send(JSON.stringify({
+			type: "ERROR",
+			data: "INVALID_URL"
+		}));
+	}
+	if (status.signal === 15) {
+		ws.send(JSON.stringify({
+			type: "ERROR",
+			data: "USER_CANCELLED"
+		}));
+	}
 
-        const childProcess = Deno.run({ 
-            cmd: args,
-            cwd: Deno.cwd(),
-            stdout: 'piped',
-            stderr: 'piped'
-        });
-    
-        let filePath = '';
-    
-        for await (const line of readLines(childProcess.stdout)) {
-            console.log(line);
-    
-            if (line.startsWith('[ERROR]')) return '';
-    
-            // Filename is in quotes, so we can extract the filename
-            if (line.startsWith('[Merger]')) {
-                filePath = line.slice(line.indexOf('\"') + 1, line.lastIndexOf('\"'));
-                break;
-            }
-    
-            if (line.endsWith('already been downloaded')) {
-                filePath = line.slice(11, -28); // Remove '[download] ' and 'has already been downloaded\n'
-                childProcess.close();
-                return filePath;
-            }
-    
-            if (line.startsWith('[download] D')) {
-                filePath = line.slice(24); // Remove '[download] Destination: '
+	ws.close();
+}
 
-                // The filename here contains a fragment ID before the filetype. Remove the fragment ID by performing a global regex match and removing the last result
-                const matches = [ ... filePath.matchAll(/.f[0-9]{3}.*?/g) ];
-                if (matches.length > 0)
-                    filePath = filePath.replace(matches[matches.length - 1][0], '');
-                break;
-            }
-        }
+interface MediaFormat {
+	resolution: string
+}
 
-        for await (const line of readLines(childProcess.stderr)) {
-            console.error(line);
-        }
-    
-        await childProcess.status();
-        return filePath;
-    }
+export const getFormatData = async (
+	ws: WebSocket,
+	url: string
+) => {
+	const params = [
+		"./yt-dlp",
+		"--abort-on-error",
+		"--list-formats",
+		url
+	];
+
+	const proc = Deno.run({ 
+		cmd: params,
+		cwd: Deno.cwd(),
+		stdout: "piped",
+		stderr: "piped"
+	});
+
+	const formats: MediaFormat[] = [];
+	let printingFormats = false;
+
+	for await (const line of readLines(proc.stdout)) {
+		console.log(line);
+
+		if (line.startsWith("-")) {
+			printingFormats = true;
+			continue;
+		}
+
+		if (!printingFormats) continue;
+
+		const fields = line.split(/\s+/);
+		const videoExtension = fields[1];
+		const resolution = fields[2];
+
+		if (!resolution.startsWith("audio") && (
+			videoExtension === "mov" || 
+			videoExtension === "mp4" || 
+			videoExtension === "webm") && !formats.find((f) => { return f.resolution === fields[2]; })) {
+			formats.push({ resolution });
+		}
+	}
+
+	ws.send(JSON.stringify({
+		type: "FORMATS",
+		data: JSON.stringify(formats)
+	}));
+
+	for await (const line of readLines(proc.stderr)) {
+		console.error(line);
+	}
+
+	ws.close();
 }

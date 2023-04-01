@@ -1,30 +1,37 @@
-import { Application, Router } from "https://deno.land/x/oak@v11.1.0/mod.ts";
+import {
+	Application,
+	FlashServer,
+	hasFlash,
+	Router
+} from "./deps.ts";
 
-const app = new Application();
+import { cleanupDownloads } from "./controllers/cleanup.ts";
+
+const appOptions = hasFlash() ? { serverConstructor: FlashServer } : undefined;
+const app = new Application(appOptions);
 
 for await (const entry of Deno.readDir("./routes")) {
-    if (!entry.isFile) continue;
-
-    const route = await import(`./routes/${entry.name}`)
-        .catch(e => {
-            console.error(`An error occured while registering routes in routes/${entry.name}: ${e}`);
-            return undefined;
-        });
-
-    if (!route) continue;
-
-    const router: Router = route.default;
-    app.use(router.routes());
-    app.use(router.allowedMethods());
+	try {
+		const router: Router = (await import(`./routes/${entry.name}`)).router;
+		app.use(router.routes());
+		app.use(router.allowedMethods());
+	} catch (error) {
+		console.error(`An error occured while routing /routes/${entry.name}: ${error}`);
+	}
 }
 
+cleanupDownloads();
+setInterval(cleanupDownloads, 1000 * 60 * 60 * 24);
+
 app.use(async (ctx, next) => {
-    await ctx.send({
-        root: 'public',
-        index: `index.html`
-    }).catch(async () => {
-        await next();
-    });
+	try {
+		await ctx.send({
+			index: "index.html",
+			root: "./public"
+		});
+	} catch {
+		await next();
+	}
 });
 
-app.listen({ port: 8000 });
+app.listen({ port: 8011 }).catch(error => console.log(error));

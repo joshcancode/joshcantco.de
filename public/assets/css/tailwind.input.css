@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+    @font-face {
+        font-family: Libre Franklin;
+		font-weight: 400;
+        font-display: swap;
+        src: url("../fonts/LibreFranklin.woff2");
+    }
+
+    @keyframes rainbow { 
+        to { background-position: -200% 0 }
+    }
+
+    :root {
+        --width: 0;
+        font-family: Libre Franklin;
+    }
+
+    .input-btn {
+        @apply absolute right-0 bg-[rgb(50,50,75)] hover:bg-[rgb(60,60,90)] mr-1 px-4 py-1 transition duration-200 text-gray-300 hover:text-gray-200 rounded-md;
+    }
+
+    #loadingText::before {
+        @apply content-[""] absolute top-0 left-0 -z-10 rounded opacity-50 w-[var(--width)] h-full transition-[width] duration-700;
+        background: linear-gradient(to right, #67b8ff 0%, #0041a9) 200% 100%;
+        animation: rainbow 3s ease infinite;
+        -webkit-animation: rainbow 3s ease infinite;
+    }
+}

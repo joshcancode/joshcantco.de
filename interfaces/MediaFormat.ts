@@ -1,6 +1,14 @@
-export interface MediaFormat {
+export interface FormatData {
     fileType: string,
-    fileSize: string | undefined,
+    fileSize?: string,
     formatId: string,
     resolution: string
+}
+
+export interface DownloadParams {
+    url: string,
+    resolution?: string,
+    videoFormat?: string,
+    audioFormat?: string,
+    conversionMethod: string
 }

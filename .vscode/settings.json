@@ -1,0 +1,14 @@
+{
+    "deno.enable": true,
+    "deno.unstable": true,
+    "deno.enablePaths": [
+        "./controllers",
+        "./interfaces",
+        "./routes",
+        "app.ts",
+        "deps.ts"
+    ],
+    "files.associations": {
+        "*.css": "tailwindcss"
+    }
+}

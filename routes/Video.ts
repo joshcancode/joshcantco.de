@@ -1,46 +1,86 @@
-import { Router, Status } from 'https://deno.land/x/oak@v11.1.0/mod.ts';
-import VideoController from '../controllers/Video.ts'
+import {
+	Router,
+	Status
+} from "../deps.ts";
+import { getFormatData, handleDownload } from '../controllers/video.ts';
 
 const router = new Router();
 router
-    .post('/download', async (ctx) => {
-        const body = JSON.parse(await ctx.request.body().value);
+	.get("/download", (ctx) => {
+		if (!ctx.isUpgradable) {
+			ctx.throw(Status.BadGateway);
+			return;
+		}
 
-        if (body.url.startsWith("https://youtube.com")) {
-            const listIndex = body.url.indexOf('?list=');
-            listIndex > -1 ?? body.url.substring(0, listIndex);
-        }
+		const ws = ctx.upgrade();
+		ws.onmessage = (msg) => {
+			const sendErrorAndClose = () => {
+				ws.send(JSON.stringify({
+					type: "ERROR",
+					data: "INVALID_DATA"
+				}));
+				ws.close();
+				ctx.throw(Status.BadRequest);
+			};
 
-        const videoPath = await VideoController.downloadMedia(body.url, body.videoFormat);
+			let json: any;
 
-        if (videoPath.length > 0) {
-            ctx.response.status = Status.OK;
-            ctx.response.body = await Deno.readFile(videoPath);
-            ctx.response.headers.set('Content-Disposition', videoPath);
-            return;
-        }
+			try {
+				json = JSON.parse(msg.data);
+			} catch {
+				sendErrorAndClose();
+				return;
+			}
 
-        // TO-DO: Report different statuses to allow better error handling
-        ctx.response.status = Status.InternalServerError;
-        ctx.response.body = 'There was an error downloading the video.';
-    })
-    .post('/videoDetails', async (ctx) => {
-        const body = JSON.parse(await ctx.request.body().value);
+			if (json.type === "DOWNLOAD_INFO") {
+				try {
+					json = JSON.parse(json.data);
+				} catch {
+					sendErrorAndClose();
+					return;
+				}
 
-        const listIndex = body.url.indexOf('?list=');
-        if (listIndex > -1)
-            body.url = body.url.substring(0, listIndex);
+				handleDownload(ctx.request.headers.get("CF-Connecting-IP") ?? ctx.request.ip, ws, json);
+			}
+		};
+	})
+	.get("/formats", (ctx) => {
+		if (!ctx.isUpgradable) {
+			ctx.throw(Status.BadGateway);
+			return;
+		}
 
-        const mediaFormats = await VideoController.fetchVideoDetails(body.url);
+		const ws = ctx.upgrade();
+		ws.onmessage = (msg) => {
+			const sendErrorAndClose = (data: string) => {
+				ws.send(JSON.stringify({
+					type: "ERROR",
+					data
+				}));
+				ws.close();
+				ctx.throw(Status.BadRequest);
+			};
 
-        if (mediaFormats !== undefined && mediaFormats.length > 0) {
-            ctx.response.status = 200
-            ctx.response.body = mediaFormats;
-            return;
-        }
+			let json: { type: string, data: string };
 
-        ctx.response.status = 400;
-        ctx.response.body = 'There was an error downloading the video.';
-    })
+			try {
+				json = JSON.parse(msg.data);
+			} catch {
+				sendErrorAndClose("INVALID_DATA");
+				return;
+			}
 
-export default router;
+			if (json.type === "URL") {
+				try {
+					const _ = new URL(json.data);
+				} catch {
+					sendErrorAndClose("INVALID_URL");
+					return;
+				}
+
+				getFormatData(ws, json.data);
+			}
+		};
+	});
+
+export { router };
